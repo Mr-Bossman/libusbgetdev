@@ -1,13 +1,17 @@
 BUILD_DIR = build
+LIBRARY = libusbgetdev
 PROGRAM = listdevs
 
 CFLAGS :=	-Wall \
-		-Wextra
+		-Wextra \
+		-fPIC
 
 LDFLAGS :=
 
+PREFIX ?= /usr/local
+
 HOST := $(shell $(CC) -dumpmachine)
-C_SOURCES = src/listdevs.c src/libusbgetdev.c
+C_SOURCES := src/libusbgetdev.c
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(C_SOURCES:.c=.o)))
 DEPS = $(OBJECTS:%.o=%.d)
 
@@ -32,22 +36,31 @@ endif
 
 ifneq (, $(findstring linux, $(HOST)))
 C_SOURCES += src/linux_lib.c
+SONAME = $(LIBRARY).so
+LDCONFIG ?= ldconfig
 else ifneq (, $(findstring darwin, $(HOST)))
 C_SOURCES += src/darwin_lib.c
-LDFLAGS += -framework IOKit -framework CoreFoundation
+SONAME = $(LIBRARY).dylib
+LDFLAGS += -framework IOKit -framework CoreFoundation -dynamiclib
+SET_SONAME = install_name_tool -id $(PREFIX)/lib/$(SONAME) $(BUILD_DIR)/$(SONAME)
 else ifneq (, $(findstring msys, $(HOST)))
+PREFIX := /usr
 C_SOURCES += src/windows_lib.c
+SONAME = $(LIBRARY).dll
 LDFLAGS += -lsetupapi
 else
 $(error 'Could not determine the host type. Please set the $$HOST variable.')
 endif
 
-.PHONY: all clean debug
+.PHONY: all clean debug example
 
-all: $(PROGRAM)
+all: $(BUILD_DIR)/$(SONAME) $(BUILD_DIR)/$(LIBRARY).a
 
 debug: CFLAGS += -g
 debug: all
+
+example:
+	@$(MAKE) $(PROGRAM) C_SOURCES="$(C_SOURCES) src/listdevs.c"
 
 $(OBJECTS): | $(BUILD_DIR)
 
@@ -60,6 +73,25 @@ $(BUILD_DIR)/%.o: %.c
 
 $(PROGRAM): $(OBJECTS)
 	$(CC) $^ $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/$(SONAME): $(OBJECTS)
+	$(CC) -shared $^ $(LDFLAGS) -o $@
+	$(SET_SONAME)
+
+$(BUILD_DIR)/$(LIBRARY).a: $(OBJECTS)
+	$(AR) rcs $@ $^
+
+install: all
+	install -m 755 -d $(PREFIX)/include/$(LIBRARY)/
+	install -m 644 src/$(LIBRARY).h $(PREFIX)/include/$(LIBRARY)/
+	install -m 644 $(BUILD_DIR)/$(SONAME) $(PREFIX)/lib
+	install -m 644 $(BUILD_DIR)/$(LIBRARY).a $(PREFIX)/lib
+	$(LDCONFIG)
+
+uninstall:
+	-rm -rf $(PREFIX)/include/$(LIBRARY)
+	-rm -f $(PREFIX)/lib/$(SONAME)
+	-rm -f $(PREFIX)/lib/$(LIBRARY).a
 
 clean:
 	-rm -rf $(BUILD_DIR)
