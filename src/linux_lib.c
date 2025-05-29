@@ -116,10 +116,19 @@ static int get_sysfs_dir(struct libusb_device *dev, char **path)
 	return libusb_get_platform_device_id(dev, path);
 }
 #else
+
+#define USB_FMT(index, nindex, max) "%" #index "$.0u%" #max "$.*" #nindex "$s"
+
 static int get_sysfs_dir(struct libusb_device *dev, char **path)
 {
+	uint8_t port_path[8] = {0};
+	uint8_t bus_num;
+	size_t i;
 	int ret;
-	uint8_t port_path[8];
+
+	bus_num = libusb_get_bus_number(dev);
+	if (bus_num == 0)
+		return LIBUSB_ERROR_NOT_FOUND;
 
 	ret = libusb_get_port_numbers(dev, port_path, sizeof(port_path));
 	if (ret < 0)
@@ -127,8 +136,15 @@ static int get_sysfs_dir(struct libusb_device *dev, char **path)
 	else if (ret == 0)
 		return LIBUSB_ERROR_NOT_FOUND;
 
-	/* If r is >1 does that mean it is a HUB? */
-	ret = asprintf(path, "%d-%d", libusb_get_bus_number(dev), port_path[0]);
+	/* Port numbers should never be 0 */
+	for (i = ret; i < sizeof(port_path); i++)
+		port_path[i] = 0;
+
+	ret = asprintf(path, "%1$u-" USB_FMT(2, 3, 10) USB_FMT(3, 4, 10)
+		       USB_FMT(4, 5, 10) USB_FMT(5, 6, 10) USB_FMT(6, 7, 10)
+		       USB_FMT(7, 8, 10) USB_FMT(8, 9, 10) "%9$.0u", bus_num,
+		       port_path[0], port_path[1], port_path[2], port_path[3],
+		       port_path[4], port_path[5], port_path[6], port_path[7], ".");
 	if (ret < 0)
 		return LIBUSB_ERROR_NO_MEM;
 
