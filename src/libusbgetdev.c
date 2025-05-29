@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "libusb.h"
+#include <libusb.h>
 #include "libusbgetdev.h"
 #include "libusbgetdevi.h"
 

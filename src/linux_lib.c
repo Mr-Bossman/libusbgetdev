@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-#include "libusb.h"
+#include <libusb.h>
 #include "libusbgetdev.h"
 #include "libusbgetdevi.h"
 

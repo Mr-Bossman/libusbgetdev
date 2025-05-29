@@ -2,7 +2,7 @@
 #define LIBUSBGETDEVI_H
 
 #include <stdlib.h>
-#include "libusb.h"
+#include <libusb.h>
 #include "libusbgetdev.h"
 
 enum usbi_dev_type {
