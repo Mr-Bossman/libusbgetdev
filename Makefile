@@ -1,6 +1,8 @@
 BUILD_DIR = build
 LIBRARY = libusbgetdev
 PROGRAM = listdevs
+URL = https://github.com/Mr-Bossman/libusbgetdev
+VERSION = 0.1.0
 
 CFLAGS :=	-Wall \
 		-Wextra \
@@ -9,6 +11,7 @@ CFLAGS :=	-Wall \
 LDFLAGS :=
 
 PREFIX ?= /usr/local
+PKG_CONFIG ?= pkg-config
 
 HOST := $(shell $(CC) -dumpmachine)
 C_SOURCES := src/libusbgetdev.c
@@ -18,9 +21,9 @@ DEPS = $(OBJECTS:%.o=%.d)
 vpath %.c $(sort $(dir $(C_SOURCES)))
 vpath %.o $(BUILD_DIR)
 
-ifneq (, $(shell pkg-config --version 2>/dev/null))
-	CFLAGS += $(shell pkg-config --cflags libusb-1.0)
-	LDFLAGS += $(shell pkg-config --libs libusb-1.0)
+ifneq (, $(shell $(PKG_CONFIG) --version 2>/dev/null))
+	CFLAGS += $(shell $(PKG_CONFIG) --cflags libusb-1.0)
+	LDFLAGS += $(shell $(PKG_CONFIG) --libs libusb-1.0)
 else
 	CFLAGS += -I/usr/include/libusb-1.0
 	LDFLAGS += -lusb-1.0
@@ -48,13 +51,36 @@ PREFIX := /usr
 C_SOURCES += src/windows_lib.c
 SONAME = $(LIBRARY).dll
 LDFLAGS += -lsetupapi
+LIBS = -lsetupapi
 else
 $(error 'Could not determine the host type. Please set the $$HOST variable.')
 endif
 
+define newline
+
+
+endef
+_file = @printf "$(subst $(newline),\n,$(1))" $(2) "$(3)"
+
+define PKG_CONFIG_FILE
+prefix=$(PREFIX)
+exec_prefix=\$${prefix}
+includedir=\$${prefix}/include
+libdir=\$${exec_prefix}/lib
+
+Name: $(LIBRARY)
+Description: A cross-platform library to correlate USB devices to block or character devices
+URL: $(URL)
+Version: $(VERSION)
+Requires: libusb-1.0
+Cflags: -I\$${includedir}/$(LIBRARY)
+Libs: -L\$${libdir} -l$(LIBRARY:lib%=%) $(LIBS)
+
+endef
+
 .PHONY: all clean debug example
 
-all: $(BUILD_DIR)/$(SONAME) $(BUILD_DIR)/$(LIBRARY).a
+all: $(BUILD_DIR)/$(SONAME) $(BUILD_DIR)/$(LIBRARY).a $(BUILD_DIR)/$(LIBRARY).pc
 
 debug: CFLAGS += -g
 debug: all
@@ -81,15 +107,22 @@ $(BUILD_DIR)/$(SONAME): $(OBJECTS)
 $(BUILD_DIR)/$(LIBRARY).a: $(OBJECTS)
 	$(AR) rcs $@ $^
 
+
+$(BUILD_DIR)/$(LIBRARY).pc: $(BUILD_DIR) Makefile
+	@echo "Generating $@"
+	$(call _file,$(PKG_CONFIG_FILE),>,$@)
+
 install: all
 	install -m 755 -d $(PREFIX)/include/$(LIBRARY)/
 	install -m 644 src/$(LIBRARY).h $(PREFIX)/include/$(LIBRARY)/
 	install -m 644 $(BUILD_DIR)/$(SONAME) $(PREFIX)/lib
 	install -m 644 $(BUILD_DIR)/$(LIBRARY).a $(PREFIX)/lib
+	install -m 644 $(BUILD_DIR)/$(LIBRARY).pc $(PREFIX)/lib/pkgconfig
 	$(LDCONFIG)
 
 uninstall:
 	-rm -rf $(PREFIX)/include/$(LIBRARY)
+	-rm -f $(PREFIX)/lib/pkgconfig/$(LIBRARY).pc
 	-rm -f $(PREFIX)/lib/$(SONAME)
 	-rm -f $(PREFIX)/lib/$(LIBRARY).a
 
