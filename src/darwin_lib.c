@@ -93,7 +93,7 @@ static int darwin_get_location(struct libusb_device *dev, UInt32 *location) {
 	loc = strtoull(path, NULL, 10);
 	free(path);
 
-	if (loc == 0 || loc > UINT64_MAX)
+	if (loc == 0 || loc >= UINT64_MAX)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
 	matchingDict = IORegistryEntryIDMatching(loc);
