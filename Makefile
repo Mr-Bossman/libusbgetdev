@@ -31,10 +31,10 @@ endif
 
 run_check = printf "$(1)" | $(CC) -x c -c -S -Wall -Werror $(CFLAGS) -o - - > /dev/null 2>&1; echo $$?
 
-have_plat_devid=\#include <libusb.h>\n int main(void) { return sizeof(libusb_get_platform_device_id); }
+have_get_session_data=\#include <libusb.h>\n int main(void) { return sizeof(libusb_get_session_data); }
 
-ifeq (0, $(shell $(call run_check,$(have_plat_devid))))
-CFLAGS += -DHAVE_PLAT_DEVID
+ifeq (0, $(shell $(call run_check,$(have_get_session_data))))
+CFLAGS += -DHAVE_GET_SESSION_DATA
 endif
 
 ifneq (, $(findstring linux, $(HOST)))
@@ -44,7 +44,8 @@ LDCONFIG ?= ldconfig
 else ifneq (, $(findstring darwin, $(HOST)))
 C_SOURCES += src/darwin_lib.c
 SONAME = $(LIBRARY).dylib
-LDFLAGS += -framework IOKit -framework CoreFoundation -dynamiclib
+LDFLAGS += -framework IOKit -framework CoreFoundation -framework Security
+LIB_LDFLAGS += -dynamiclib
 SET_SONAME = install_name_tool -id $(PREFIX)/lib/$(SONAME) $(BUILD_DIR)/$(SONAME)
 else ifneq (, $(findstring msys, $(HOST)))
 PREFIX := /usr
@@ -101,7 +102,7 @@ $(PROGRAM): $(OBJECTS)
 	$(CC) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/$(SONAME): $(OBJECTS)
-	$(CC) -shared $^ $(LDFLAGS) -o $@
+	$(CC) -shared $^ $(LDFLAGS) $(LIB_LDFLAGS) -o $@
 	$(SET_SONAME)
 
 $(BUILD_DIR)/$(LIBRARY).a: $(OBJECTS)
@@ -113,8 +114,8 @@ $(BUILD_DIR)/$(LIBRARY).pc: $(BUILD_DIR) Makefile
 	$(call _file,$(PKG_CONFIG_FILE),>,$@)
 
 install: all
-	install -m 755 -d $(PREFIX)/include/$(LIBRARY)/
-	install -m 644 src/$(LIBRARY).h $(PREFIX)/include/$(LIBRARY)/
+	install -m 755 -d $(PREFIX)/include/$(LIBRARY)
+	install -m 644 src/$(LIBRARY).h $(PREFIX)/include/$(LIBRARY)
 	install -m 644 $(BUILD_DIR)/$(SONAME) $(PREFIX)/lib
 	install -m 644 $(BUILD_DIR)/$(LIBRARY).a $(PREFIX)/lib
 	install -m 644 $(BUILD_DIR)/$(LIBRARY).pc $(PREFIX)/lib/pkgconfig
