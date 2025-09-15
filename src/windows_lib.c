@@ -8,26 +8,28 @@
 #include <setupapi.h>
 #include <devguid.h>
 #include <Devpkey.h>
+#include <cfgmgr32.h>
 
 #include <libusb.h>
 #include "libusbgetdev.h"
 #include "libusbgetdevi.h"
 
-static int match_dev_path(enum usbi_dev_type dev_type, const char *dev_reg_path, char **path);
-static int get_parent(HDEVINFO device_info_set, PSP_DEVINFO_DATA device_info_data, char** parent);
+static int match_dev_path(enum usbi_dev_type dev_type, DEVINST devinst, char **path);
 static int get_chardev(HDEVINFO device_info_set, PSP_DEVINFO_DATA device_info_data, char** com);
 static int get_blockdev(HDEVINFO device_info_set, PSP_DEVICE_INTERFACE_DATA device_interface_data, char **path);
 
-#ifdef HAVE_PLAT_DEVID
-static int get_devid(struct libusb_device *dev, char **DeviceID)
+#ifdef HAVE_GET_SESSION_DATA
+static int get_devid(struct libusb_device *dev, DEVINST *devinst)
 {
-	return libusb_get_platform_device_id(dev, DeviceID);
+	*devinst = libusb_get_session_data(dev);
+
+	return LIBUSB_SUCCESS;
 }
 #else
-static int get_devid(struct libusb_device *dev, char **DeviceID)
+static int get_devid(struct libusb_device *dev, DEVINST *devinst)
 {
 	(void)dev;
-	(void)DeviceID;
+	(void)devinst;
 
 	return LIBUSB_ERROR_NOT_FOUND;
 }
@@ -36,33 +38,31 @@ static int get_devid(struct libusb_device *dev, char **DeviceID)
 int get_dev_path(struct libusb_device *dev, int iface_idx,
 	enum usbi_dev_type dev_type, char **path)
 {
-	char *DeviceID;
+	DEVINST devinst;
 
 	(void)iface_idx;
 
-	if (get_devid(dev, &DeviceID) != LIBUSB_SUCCESS)
+	if (get_devid(dev, &devinst) != LIBUSB_SUCCESS)
 		return LIBUSB_ERROR_NOT_FOUND;
 
-	return match_dev_path(dev_type, DeviceID, path);
+	return match_dev_path(dev_type, devinst, path);
 }
 
-static int match_dev_path(enum usbi_dev_type dev_type, const char *DeviceID, char **path) {
+static int match_dev_path(enum usbi_dev_type dev_type, DEVINST devinst, char **path) {
 	HDEVINFO device_info_set;
+	DEVINST parent_devinst;
 	SP_DEVINFO_DATA device_info_data;
 	SP_DEVICE_INTERFACE_DATA device_interface_data;
 	DWORD deviceIndex = 0;
 	const GUID *ClassGuid;
-	char* parent;
-	int ret;
+	int ret = LIBUSB_ERROR_NOT_FOUND;
 
 	*path = NULL;
 
 	if (dev_type == USBI_DEV_BLOCK)
 		ClassGuid = (const GUID *) &GUID_DEVINTERFACE_DISK;
-	else if (dev_type == USBI_DEV_CHAR)
-		ClassGuid = (const GUID *) &GUID_DEVCLASS_PORTS;
 	else
-		return -1;
+		ClassGuid = (const GUID *) &GUID_DEVCLASS_PORTS;
 
 	device_info_set = SetupDiGetClassDevs(ClassGuid, NULL, NULL,
 					      DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
@@ -74,15 +74,15 @@ static int match_dev_path(enum usbi_dev_type dev_type, const char *DeviceID, cha
 		SetupDiEnumDeviceInterfaces(device_info_set, NULL, ClassGuid,
 					    deviceIndex, &device_interface_data);
 
-		get_parent(device_info_set, &device_info_data, &parent);
+		if (CM_Get_Parent(&parent_devinst, device_info_data.DevInst, 0) != CR_SUCCESS) {
+			ret = LIBUSB_ERROR_OTHER;
+			break;
+		}
 
-		if (strcmp(parent, DeviceID) != 0) {
-			free(parent);
+		if (parent_devinst != devinst) {
 			deviceIndex++;
 			continue;
 		}
-
-		free(parent);
 
 		if (dev_type == USBI_DEV_BLOCK)
 			ret = get_blockdev(device_info_set, &device_interface_data, path);
@@ -101,26 +101,6 @@ static int match_dev_path(enum usbi_dev_type dev_type, const char *DeviceID, cha
 
 }
 
-static int get_parent(HDEVINFO device_info_set, PSP_DEVINFO_DATA device_info_data, char** parent) {
-	DEVPROPTYPE property_type;
-	DWORD required_size;
-	LPWSTR wpath;
-	size_t path_size;
-
-	SetupDiGetDevicePropertyW(device_info_set, device_info_data, &DEVPKEY_Device_Parent, &property_type, NULL, 0, &required_size, 0);
-
-	wpath = (LPWSTR)malloc(required_size);
-	SetupDiGetDevicePropertyW(device_info_set, device_info_data, &DEVPKEY_Device_Parent, &property_type, (PBYTE)wpath, required_size, NULL, 0);
-
-	path_size = WideCharToMultiByte(CP_UTF8, 0, wpath, required_size / sizeof(wchar_t), NULL, 0, NULL, NULL);
-
-	*parent = (char*)malloc(path_size + 1);
-	WideCharToMultiByte(CP_UTF8, 0, wpath, required_size / sizeof(wchar_t), *parent, path_size, NULL, NULL);
-
-	free(wpath);
-	return 0;
-}
-
 static int get_chardev(HDEVINFO device_info_set, PSP_DEVINFO_DATA device_info_data, char** path) {
 	HKEY hkey;
 	LSTATUS return_code;
@@ -135,7 +115,7 @@ static int get_chardev(HDEVINFO device_info_set, PSP_DEVINFO_DATA device_info_da
 
 	if (return_code != EXIT_SUCCESS) {
 		RegCloseKey(hkey);
-		return -1;
+		return LIBUSB_ERROR_OTHER;
 	}
 
 	*path = (char *)malloc(port_name_length + 1);
@@ -152,14 +132,14 @@ static int get_chardev(HDEVINFO device_info_set, PSP_DEVINFO_DATA device_info_da
 	if (return_code != EXIT_SUCCESS) {
 		free(*path);
 		*path = NULL;
-		return -1;
+		return LIBUSB_ERROR_OTHER;
 	}
 
 	// Ignore parallel ports
 	if (strstr(*path, "LPT") != NULL) {
 		free(*path);
 		*path = NULL;
-		return -1;
+		return LIBUSB_ERROR_OTHER;
 	}
 
 	return 0;
