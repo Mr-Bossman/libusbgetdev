@@ -44,7 +44,8 @@ LDCONFIG ?= ldconfig
 else ifneq (, $(findstring darwin, $(HOST)))
 C_SOURCES += src/darwin_lib.c
 SONAME = $(LIBRARY).dylib
-LDFLAGS += -framework IOKit -framework CoreFoundation -dynamiclib
+LDFLAGS += -framework IOKit -framework CoreFoundation -framework Security
+LIB_LDFLAGS += -dynamiclib
 SET_SONAME = install_name_tool -id $(PREFIX)/lib/$(SONAME) $(BUILD_DIR)/$(SONAME)
 else ifneq (, $(findstring msys, $(HOST)))
 PREFIX := /usr
@@ -101,7 +102,7 @@ $(PROGRAM): $(OBJECTS)
 	$(CC) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/$(SONAME): $(OBJECTS)
-	$(CC) -shared $^ $(LDFLAGS) -o $@
+	$(CC) -shared $^ $(LDFLAGS) $(LIB_LDFLAGS) -o $@
 	$(SET_SONAME)
 
 $(BUILD_DIR)/$(LIBRARY).a: $(OBJECTS)
