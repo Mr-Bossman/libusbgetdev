@@ -31,10 +31,10 @@ endif
 
 run_check = printf "$(1)" | $(CC) -x c -c -S -Wall -Werror $(CFLAGS) -o - - > /dev/null 2>&1; echo $$?
 
-have_plat_devid=\#include <libusb.h>\n int main(void) { return sizeof(libusb_get_platform_device_id); }
+have_get_session_data=\#include <libusb.h>\n int main(void) { return sizeof(libusb_get_session_data); }
 
-ifeq (0, $(shell $(call run_check,$(have_plat_devid))))
-CFLAGS += -DHAVE_PLAT_DEVID
+ifeq (0, $(shell $(call run_check,$(have_get_session_data))))
+CFLAGS += -DHAVE_GET_SESSION_DATA
 endif
 
 ifneq (, $(findstring linux, $(HOST)))

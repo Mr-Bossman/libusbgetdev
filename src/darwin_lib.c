@@ -74,31 +74,32 @@ static IOReturn IORegistryChildConformsTo(const io_service_t *service, io_servic
 	return kIOReturnNoDevice;
 }
 
-#ifdef HAVE_PLAT_DEVID
+#ifdef HAVE_GET_SESSION_DATA
+static io_service_t usb_find_matching_session(UInt64 sessionID) {
+	CFMutableDictionaryRef matchingDict = IOServiceMatching ("IOUSBDevice");
+	CFMutableDictionaryRef propertyMatchDict = CFDictionaryCreateMutable (kCFAllocatorDefault, 0,
+									      &kCFTypeDictionaryKeyCallBacks,
+									      &kCFTypeDictionaryValueCallBacks);
+	CFTypeRef sessionCF = CFNumberCreate (NULL, kCFNumberSInt64Type, &sessionID);
+
+	CFDictionarySetValue (matchingDict, CFSTR(kIOPropertyMatchKey), propertyMatchDict);
+	CFDictionarySetValue (propertyMatchDict, CFSTR("sessionID"), sessionCF);
+
+	CFRelease (sessionCF);
+	CFRelease (propertyMatchDict);
+
+	return IOServiceGetMatchingService (darwin_default_master_port, matchingDict);
+}
+
 static int darwin_get_location(struct libusb_device *dev, UInt32 *location) {
-	CFMutableDictionaryRef	matchingDict;
-	unsigned long long int	loc;
 	io_service_t		service = IO_OBJECT_NULL;
 	CFTypeRef		cf_location;
 	UInt32			ret_loc;
 	bool			success;
-	char			*path;
-	int			ret;
+	unsigned long		sessionID;
 
-	ret = libusb_get_platform_device_id(dev, &path);
-	if (ret != LIBUSB_SUCCESS) {
-		return ret;
-	}
-
-	loc = strtoull(path, NULL, 10);
-	free(path);
-
-	if (loc == 0 || loc >= UINT64_MAX)
-		return LIBUSB_ERROR_INVALID_PARAM;
-
-	matchingDict = IORegistryEntryIDMatching(loc);
-
-	service = IOServiceGetMatchingService (darwin_default_master_port, matchingDict);
+	sessionID = libusb_get_session_data(dev);
+	service = usb_find_matching_session(sessionID);
 	cf_location = IORegistryEntryCreateCFProperty (service, CFSTR("locationID"), kCFAllocatorDefault, 0);
 
 	if (!cf_location) {
