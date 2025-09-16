@@ -110,13 +110,6 @@ static int get_subsytem(char **buf,
 	return ret;
 }
 
-#ifdef HAVE_PLAT_DEVID
-static int get_sysfs_dir(struct libusb_device *dev, char **path)
-{
-	return libusb_get_platform_device_id(dev, path);
-}
-#else
-
 #define USB_FMT(index, nindex, max) "%" #index "$.0u%" #max "$.*" #nindex "$s"
 
 static int get_sysfs_dir(struct libusb_device *dev, char **path)
@@ -150,7 +143,6 @@ static int get_sysfs_dir(struct libusb_device *dev, char **path)
 
 	return LIBUSB_SUCCESS;
 }
-#endif
 
 int get_dev_path(struct libusb_device *dev, int iface_idx,
 	enum usbi_dev_type dev_type, char **path)
