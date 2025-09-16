@@ -113,8 +113,8 @@ $(BUILD_DIR)/$(LIBRARY).pc: $(BUILD_DIR) Makefile
 	$(call _file,$(PKG_CONFIG_FILE),>,$@)
 
 install: all
-	install -m 755 -d $(PREFIX)/include/$(LIBRARY)/
-	install -m 644 src/$(LIBRARY).h $(PREFIX)/include/$(LIBRARY)/
+	install -m 755 -d $(PREFIX)/include/$(LIBRARY)
+	install -m 644 src/$(LIBRARY).h $(PREFIX)/include/$(LIBRARY)
 	install -m 644 $(BUILD_DIR)/$(SONAME) $(PREFIX)/lib
 	install -m 644 $(BUILD_DIR)/$(LIBRARY).a $(PREFIX)/lib
 	install -m 644 $(BUILD_DIR)/$(LIBRARY).pc $(PREFIX)/lib/pkgconfig
